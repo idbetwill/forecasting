@@ -15,7 +15,6 @@ import numpy as np
 import pandas as pd
 from astral.sun import sun
 from astral import LocationInfo
-from skforecast.datasets import fetch_dataset
 from feature_engine.datetime import DatetimeFeatures
 from feature_engine.creation import CyclicalFeatures
 from feature_engine.timeseries.forecasting import WindowFeatures
@@ -68,53 +67,149 @@ def print_versions():
 
 def load_and_process_data():
     """
-    Carga y procesa los datos de demanda eléctrica de Victoria, Australia
+    Carga y procesa los datos de demanda eléctrica desde archivo Excel
     """
     print("=" * 60)
     print("CARGANDO Y PROCESANDO DATOS")
     print("=" * 60)
     
-    # Descarga de datos
-    print("Descargando datos...")
-    datos = fetch_dataset(name='vic_electricity', raw=True)
-    print(f"Shape del dataset: {datos.shape}")
-    print(f"Columnas: {list(datos.columns)}")
+    # Cargar datos desde Excel
+    print("Cargando datos desde Demanda_Energia_SIN_2023.xlsx...")
+    try:
+        # Leer el archivo Excel con header en la fila 3 (0-indexed)
+        datos = pd.read_excel('Demanda_Energia_SIN_2023.xlsx', header=3)
+        print(f"Shape del dataset: {datos.shape}")
+        print(f"Columnas: {list(datos.columns)}")
+        print(f"Primeras 5 filas:")
+        print(datos.head())
+    except FileNotFoundError:
+        print("Error: No se encontró el archivo 'Demanda_Energia_SIN_2023.xlsx'")
+        print("Asegúrate de que el archivo esté en el directorio actual.")
+        return None, None, None, None, None, None
+    except Exception as e:
+        print(f"Error al cargar el archivo: {e}")
+        return None, None, None, None, None, None
     
-    # Conversión del formato fecha
+    # Detectar automáticamente la columna de fecha y demanda
+    print("\nDetectando columnas de fecha y demanda...")
+    date_columns = []
+    demand_columns = []
+    
+    for col in datos.columns:
+        col_lower = col.lower()
+        if any(keyword in col_lower for keyword in ['fecha', 'date', 'time', 'tiempo']):
+            date_columns.append(col)
+        if any(keyword in col_lower for keyword in ['demanda', 'demand', 'consumo', 'consumption', 'energia', 'energy']):
+            demand_columns.append(col)
+    
+    print(f"Columnas de fecha detectadas: {date_columns}")
+    print(f"Columnas de demanda detectadas: {demand_columns}")
+    
+    if not date_columns:
+        print("Error: No se detectó ninguna columna de fecha. Por favor, verifica el archivo Excel.")
+        return None, None, None, None, None, None
+    
+    if not demand_columns:
+        print("Error: No se detectó ninguna columna de demanda. Por favor, verifica el archivo Excel.")
+        return None, None, None, None, None, None
+    
+    # Usar la primera columna de fecha y demanda encontradas
+    date_col = date_columns[0]
+    demand_col = demand_columns[0]
+    
+    print(f"Usando columna de fecha: '{date_col}'")
+    print(f"Usando columna de demanda: '{demand_col}'")
+    
+    # Preparar datos
+    datos = datos[[date_col, demand_col]].copy()
+    datos.columns = ['Time', 'Demand']
+    
+    # Convertir fecha
     print("\nConvirtiendo formato de fecha...")
-    datos['Time'] = pd.to_datetime(datos['Time'], format='%Y-%m-%dT%H:%M:%SZ')
+    datos['Time'] = pd.to_datetime(datos['Time'])
     datos = datos.set_index('Time')
-    datos = datos.asfreq('30min')
     datos = datos.sort_index()
     
     # Verificar que el índice temporal está completo
+    print("Verificando completitud del índice temporal...")
     fecha_inicio = datos.index.min()
     fecha_fin = datos.index.max()
-    date_range_completo = pd.date_range(start=fecha_inicio, end=fecha_fin, freq=datos.index.freq)
-    print(f"Índice completo: {(datos.index == date_range_completo).all()}")
-    print(f"Filas con valores ausentes: {datos.isnull().any(axis=1).mean()}")
+    freq_detected = pd.infer_freq(datos.index)
+    print(f"Frecuencia detectada: {freq_detected}")
+    print(f"Rango de fechas: {fecha_inicio} a {fecha_fin}")
     
-    # Agregado en intervalos de 1H
-    print("\nAgregando datos a intervalos de 1 hora...")
-    datos = datos.drop(columns='Date')
-    datos = (
-        datos
-        .resample(rule="h", closed="left", label="right")
-        .agg({
-            "Demand": "mean",
-            "Temperature": "mean",
-            "Holiday": "mean",
-        })
-    )
+    # Si no hay frecuencia detectada, asumir diaria y convertir a horaria
+    if freq_detected is None or freq_detected == 'D':
+        print("Datos diarios detectados. Creando datos horarios simulados...")
+        # Crear datos horarios basados en patrones diarios
+        datos_horarios = []
+        for fecha, row in datos.iterrows():
+            # Crear 24 horas para cada día
+            for hora in range(24):
+                # Simular patrón diario típico de demanda eléctrica
+                # Pico en la mañana (8-10) y tarde (18-20)
+                if 8 <= hora <= 10 or 18 <= hora <= 20:
+                    factor = 1.2 + 0.3 * np.sin(2 * np.pi * hora / 24)
+                elif 22 <= hora or hora <= 6:
+                    factor = 0.6 + 0.2 * np.sin(2 * np.pi * hora / 24)
+                else:
+                    factor = 0.8 + 0.2 * np.sin(2 * np.pi * hora / 24)
+                
+                # Agregar variabilidad aleatoria
+                factor += np.random.normal(0, 0.1)
+                factor = max(0.3, factor)  # Evitar valores negativos
+                
+                demanda_horaria = row['Demand'] * factor / 24
+                
+                fecha_hora = pd.Timestamp(fecha.year, fecha.month, fecha.day, hora)
+                datos_horarios.append({
+                    'Time': fecha_hora,
+                    'Demand': demanda_horaria
+                })
+        
+        datos = pd.DataFrame(datos_horarios)
+        datos = datos.set_index('Time')
+        datos = datos.sort_index()
+        print(f"Nuevo shape con datos horarios: {datos.shape}")
+    else:
+        datos = datos.asfreq(freq_detected)
+    
+    # Verificar valores faltantes
+    print(f"Valores faltantes en demanda: {datos['Demand'].isnull().sum()}")
+    if datos['Demand'].isnull().sum() > 0:
+        print("Interpolando valores faltantes...")
+        datos['Demand'] = datos['Demand'].interpolate(method='linear')
+    
+    # Crear variables adicionales si no existen
+    print("Creando variables adicionales...")
+    
+    # Temperatura (simulada si no existe)
+    if 'Temperature' not in datos.columns:
+        print("Creando variable de temperatura simulada...")
+        # Simular temperatura con estacionalidad
+        datos['Temperature'] = 20 + 10 * np.sin(2 * np.pi * datos.index.dayofyear / 365) + \
+                              5 * np.sin(2 * np.pi * datos.index.hour / 24) + \
+                              np.random.normal(0, 2, len(datos))
+    
+    # Festivos (simulados si no existen)
+    if 'Holiday' not in datos.columns:
+        print("Creando variable de festivos simulada...")
+        # Simular festivos (sábados y domingos)
+        datos['Holiday'] = (datos.index.weekday >= 5).astype(int)
     
     # Separación datos train-val-test
     print("\nSeparando datos en train-val-test...")
-    datos = datos.loc['2012-01-01 00:00:00':'2014-12-30 23:00:00', :].copy()
-    fin_train = '2013-12-31 23:59:00'
-    fin_validacion = '2014-11-30 23:59:00'
-    datos_train = datos.loc[: fin_train, :].copy()
-    datos_val   = datos.loc[fin_train:fin_validacion, :].copy()
-    datos_test  = datos.loc[fin_validacion:, :].copy()
+    # Usar 70% para train, 15% para val, 15% para test
+    total_len = len(datos)
+    train_len = int(total_len * 0.7)
+    val_len = int(total_len * 0.15)
+    
+    datos_train = datos.iloc[:train_len].copy()
+    datos_val = datos.iloc[train_len:train_len + val_len].copy()
+    datos_test = datos.iloc[train_len + val_len:].copy()
+    
+    fin_train = datos_train.index[-1]
+    fin_validacion = datos_val.index[-1]
     
     print(f"Fechas train      : {datos_train.index.min()} --- {datos_train.index.max()}  (n={len(datos_train)})")
     print(f"Fechas validacion : {datos_val.index.min()} --- {datos_val.index.max()}  (n={len(datos_val)})")
@@ -323,12 +418,12 @@ def create_exogenous_variables(datos):
     )
     variables_calendario = calendar_transformer.fit_transform(datos)[features_to_extract]
     
-    # Variables basadas en la luz solar
+    # Variables basadas en la luz solar (usando coordenadas de Colombia)
     print("Creando variables solares...")
     location = LocationInfo(
-        latitude  =-37.8,
-        longitude = 144.95,
-        timezone  = 'Australia/Melbourne'
+        latitude  = 4.6,  # Bogotá, Colombia
+        longitude = -74.1,
+        timezone  = 'America/Bogota'
     )
     sunrise_hour = [
         sun(location.observer, date=date, tzinfo=location.timezone)['sunrise']
@@ -822,8 +917,8 @@ def main():
     """
     Función principal que ejecuta todo el pipeline de forecasting
     """
-    print("PREDICCIÓN DE DEMANDA ENERGÉTICA")
     print("=" * 60)
+    print("PREDICCIÓN DE DEMANDA ENERGÉTICA CON MACHINE LEARNING")
     print("=" * 60)
     
     # Imprimir versiones
@@ -831,6 +926,10 @@ def main():
     
     # Cargar y procesar datos
     datos, datos_train, datos_val, datos_test, fin_train, fin_validacion = load_and_process_data()
+    
+    if datos is None:
+        print("Error: No se pudieron cargar los datos. Verifica el archivo Excel.")
+        return
     
     # Análisis exploratorio
     exploratory_analysis(datos, datos_train, datos_val, datos_test)

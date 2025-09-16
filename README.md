@@ -21,9 +21,10 @@ Este proyecto incluye los siguientes archivos:
 
 1. **`energy_demand_forecasting.py`**: Script original que utiliza datos de Victoria, Australia (para demostración)
 2. **`energy_demand_forecasting_xlsx.py`**: Script principal para predicción del día siguiente con archivos Excel
-3. **`forecasting_colab.ipynb`**: Notebook completo para Google Colab (recomendado)
-4. **`demanda-energia-sin/`**: Carpeta con archivos Excel de demanda energética por año (2000-2023)
-5. **`requirements.txt`**: Dependencias del proyecto
+3. **`forecasting_demanda_energia.ipynb`**: **NUEVO** - Notebook de forecasting recursivo multi-step con ForecasterRecursive
+4. **`forecasting_colab.ipynb`**: Notebook completo para Google Colab (recomendado)
+5. **`demanda-energia-sin/`**: Carpeta con archivos Excel de demanda energética por año (2000-2025)
+6. **`requirements.txt`**: Dependencias del proyecto
 
 ## Instalación
 
@@ -50,7 +51,12 @@ pip install -r requirements.txt
 
 ### Uso Local
 
-**Para predicción del día siguiente (recomendado):**
+**Para forecasting recursivo multi-step (NUEVO - Recomendado):**
+```bash
+jupyter notebook forecasting_demanda_energia.ipynb
+```
+
+**Para predicción del día siguiente (script):**
 ```bash
 python energy_demand_forecasting_xlsx.py
 ```
@@ -62,7 +68,17 @@ python energy_demand_forecasting.py
 
 ### Resultados
 
-El script generará:
+**Notebook de Forecasting Recursivo (`forecasting_demanda_energia.ipynb`):**
+- **Análisis exploratorio completo** con gráficos interactivos (Plotly + Matplotlib)
+- **Partición de datos** train/validation/test (70/15/15)
+- **Modelo recursivo multi-step** con ForecasterRecursive y LightGBM
+- **Gráficos de dispersión** para evaluar real vs predicho
+- **Series temporales** con predicciones superpuestas
+- **Predicción del día siguiente** con 24 horas de anticipación
+- **Archivo CSV** con las predicciones (`prediccion_demanda_YYYYMMDD.csv`)
+- **Métricas de rendimiento** (MAE, RMSE, R²)
+
+**Scripts Python:**
 - **Análisis exploratorio completo** con gráficos interactivos
 - **Predicción horaria** para las 24 horas del día siguiente
 - **Archivo CSV** con las predicciones (`prediccion_demanda_YYYYMMDD.csv`)
@@ -135,9 +151,9 @@ drive.mount('/content/drive')
 
 El proyecto incluye datos históricos de demanda energética del Sistema Interconectado Nacional (SIN) de Colombia:
 
-- **Período**: 2000-2023 (24 años de datos)
+- **Período**: 2000-2025 (26 años de datos)
 - **Frecuencia**: Datos diarios convertidos automáticamente a horarios
-- **Archivos**: 24 archivos Excel organizados por año
+- **Archivos**: 25 archivos Excel organizados por año
 - **Formato**: Cada archivo contiene columnas de fecha y demanda energética
 
 ### Estructura de Datos
@@ -156,6 +172,8 @@ Los archivos Excel siguen el formato estándar:
 | 2001 | Demanda_Energia_SIN_2001.xlsx | ~108 días |
 | ... | ... | ... |
 | 2023 | Demanda_Energia_SIN_2023.xlsx | ~142 días |
+| 2024 | Demanda_Energia_SIN_2024.xlsx | ~115 días |
+| 2025 | Demanda_Energia_SIN_2025.xlsx | ~93 días |
 
 ## Estructura del Proyecto
 
@@ -163,6 +181,7 @@ Los archivos Excel siguen el formato estándar:
 forecasting/
 ├── energy_demand_forecasting.py         # Script original (datos Victoria)
 ├── energy_demand_forecasting_xlsx.py    # Script principal para predicción
+├── forecasting_demanda_energia.ipynb   # NUEVO: Notebook forecasting recursivo
 ├── forecasting_colab.ipynb             # Notebook completo para Colab
 ├── requirements.txt                     # Dependencias
 ├── .gitignore                          # Archivos ignorados por git
@@ -170,12 +189,32 @@ forecasting/
 │   ├── Demanda_Energia_SIN_2000.xlsx
 │   ├── Demanda_Energia_SIN_2001.xlsx
 │   ├── ...
-│   └── Demanda_Energia_SIN_2023.xlsx
+│   ├── Demanda_Energia_SIN_2023.xlsx
+│   ├── Demanda_Energia_SIN_2024.xlsx
+│   └── Demanda_Energia_SIN_2025.xlsx
 ├── prediccion_demanda_YYYYMMDD.csv     # Archivo de salida con predicciones
 └── README.md                           # Este archivo
 ```
 
 ## Metodología
+
+### Notebook de Forecasting Recursivo (`forecasting_demanda_energia.ipynb`)
+
+**Método**: Forecasting Recursivo Multi-Step con `ForecasterRecursive`
+
+1. **Carga automática**: Lectura de múltiples archivos Excel desde `demanda-energia-sin/`
+2. **Análisis exploratorio**: Estadísticas descriptivas, visualizaciones interactivas con Plotly
+3. **Procesamiento**: Conversión de datos diarios a horarios con patrones simulados
+4. **Partición temporal**: 70% entrenamiento, 15% validación, 15% prueba
+5. **Modelo recursivo**: ForecasterRecursive con LightGBM
+   - **Lags**: 24 horas (último día completo)
+   - **Features de ventana**: Media y desviación estándar de 24h y 7 días
+6. **Evaluación**: Métricas MAE, RMSE, R² en validación y prueba
+7. **Visualizaciones**: Gráficos de dispersión (real vs predicho) y series temporales
+8. **Predicción del día siguiente**: 24 horas de anticipación con visualizaciones
+9. **Exportación**: Resultados guardados en CSV para uso posterior
+
+### Scripts Python (Metodología Original)
 
 1. **Carga automática**: Lectura de múltiples archivos Excel desde `demanda-energia-sin/`
 2. **Análisis exploratorio**: Estadísticas descriptivas, visualizaciones y detección de patrones
@@ -188,6 +227,37 @@ forecasting/
 9. **Predicción del día siguiente**: 24 horas de anticipación con visualizaciones
 10. **Exportación**: Resultados guardados en CSV para uso posterior
 
+## Características del Forecasting Recursivo
+
+### ¿Qué es el Forecasting Recursivo Multi-Step?
+
+El **forecasting recursivo multi-step** es un método que utiliza las propias predicciones del modelo como valores de entrada para predecir el siguiente valor. Por ejemplo, para predecir las 5 horas siguientes:
+
+1. El modelo predice t+1 usando datos históricos
+2. Usa esa predicción para predecir t+2
+3. Usa t+2 para predecir t+3, y así sucesivamente
+
+### Ventajas del Método Recursivo
+
+- **Captura dependencias temporales complejas**: El modelo aprende patrones de largo plazo
+- **Automatización completa**: La clase `ForecasterRecursive` maneja el proceso recursivo
+- **Eficiencia computacional**: Un solo modelo para múltiples pasos
+- **Ideal para series temporales**: Especialmente efectivo para demanda energética
+
+### Implementación en el Notebook
+
+```python
+# Configuración del modelo recursivo
+forecaster = ForecasterRecursive(
+    regressor=LGBMRegressor(n_estimators=100, max_depth=6),
+    lags=24,  # Usar las últimas 24 horas
+    window_features=RollingFeatures(
+        stats=["mean", "std"], 
+        window_sizes=[24, 24*7]  # 24 horas y 7 días
+    )
+)
+```
+
 ## Variables Exógenas Creadas
 
 El script crea automáticamente las siguientes variables:
@@ -199,6 +269,20 @@ El script crea automáticamente las siguientes variables:
 - **Interacciones**: combinaciones polinómicas entre variables
 
 ## Resultados
+
+### Notebook de Forecasting Recursivo
+
+El notebook genera:
+
+- **Métricas de evaluación**: MAE, RMSE, R² para validación y prueba
+- **Gráficos de dispersión**: Comparación visual entre valores reales y predichos
+- **Series temporales**: Visualización de predicciones superpuestas en datos históricos
+- **Predicción del día siguiente**: 24 horas con estadísticas detalladas (total, promedio, máximo, mínimo)
+- **Archivos de salida**: 
+  - `prediccion_demanda_YYYYMMDD.csv` - Predicciones horarias
+  - `metricas_modelo.csv` - Métricas de rendimiento
+
+### Scripts Python
 
 El pipeline genera métricas de error (MAE) para cada modelo implementado, permitiendo comparar el rendimiento de diferentes enfoques.
 

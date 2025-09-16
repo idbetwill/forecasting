@@ -1,27 +1,29 @@
 # Predicción de Demanda Energética con Machine Learning
 
-Este proyecto implementa un sistema completo de forecasting para la demanda eléctrica utilizando modelos de machine learning.
+Este proyecto implementa un sistema completo de forecasting para la demanda eléctrica utilizando modelos de machine learning, enfocado en la predicción del día siguiente.
 
-## Características
+## Características Principales
 
-- **Análisis exploratorio** de series temporales con visualizaciones interactivas
+- **Carga automática de múltiples archivos Excel** desde la carpeta `demanda-energia-sin/`
+- **Análisis exploratorio completo** con visualizaciones interactivas y estadísticas descriptivas
+- **Predicción del día siguiente** con 24 horas de anticipación
 - **Modelo baseline** usando valores equivalentes de fechas anteriores
-- **Modelo autoregresivo recursivo** con LightGBM
+- **Modelo autoregresivo recursivo** con LightGBM optimizado
 - **Variables exógenas** basadas en calendario, luz solar, festivos y temperatura
 - **Optimización de hiperparámetros** con búsqueda bayesiana
-- **Selección de predictores** con RFECV
-- **Forecasting probabilístico** con intervalos de confianza
-- **Explicabilidad del modelo** con SHAP values
-- **Forecaster direct multi-step** para predicciones independientes
-- **Predicción diaria anticipada** con gap temporal
+- **Selección automática de predictores** con RFECV
+- **Visualizaciones mejoradas** con gráficos de distribución, box plots por año y zoom temporal
+- **Exportación de resultados** en formato CSV para uso posterior
 
 ## Archivos del Proyecto
 
-Este proyecto incluye dos versiones del script principal:
+Este proyecto incluye los siguientes archivos:
 
 1. **`energy_demand_forecasting.py`**: Script original que utiliza datos de Victoria, Australia (para demostración)
-2. **`energy_demand_forecasting_xlsx.py`**: Script adaptado para trabajar con archivos Excel personalizados
+2. **`energy_demand_forecasting_xlsx.py`**: Script principal para predicción del día siguiente con archivos Excel
 3. **`forecasting_colab.ipynb`**: Notebook completo para Google Colab (recomendado)
+4. **`demanda-energia-sin/`**: Carpeta con archivos Excel de demanda energética por año (2000-2023)
+5. **`requirements.txt`**: Dependencias del proyecto
 
 ## Instalación
 
@@ -44,11 +46,11 @@ source venv/bin/activate  # En Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Coloca tu archivo Excel con los datos de demanda energética en el directorio raíz del proyecto con el nombre `Demanda_Energia_SIN_2023.xlsx`
+4. Los archivos Excel de demanda energética ya están incluidos en la carpeta `demanda-energia-sin/`
 
 ### Uso Local
 
-**Para usar con datos de Excel personalizados (recomendado):**
+**Para predicción del día siguiente (recomendado):**
 ```bash
 python energy_demand_forecasting_xlsx.py
 ```
@@ -57,6 +59,14 @@ python energy_demand_forecasting_xlsx.py
 ```bash
 python energy_demand_forecasting.py
 ```
+
+### Resultados
+
+El script generará:
+- **Análisis exploratorio completo** con gráficos interactivos
+- **Predicción horaria** para las 24 horas del día siguiente
+- **Archivo CSV** con las predicciones (`prediccion_demanda_YYYYMMDD.csv`)
+- **Métricas de rendimiento** del modelo
 
 ## Uso en Google Colab (Recomendado)
 
@@ -121,50 +131,62 @@ drive.mount('/content/drive')
 !python energy_demand_forecasting_xlsx.py
 ```
 
-## Formato del Archivo Excel
+## Datos Incluidos
 
-El script `energy_demand_forecasting_xlsx.py` espera un archivo Excel con las siguientes características:
+El proyecto incluye datos históricos de demanda energética del Sistema Interconectado Nacional (SIN) de Colombia:
 
-- **Columna de fecha**: Debe contener una de estas palabras clave en el nombre: 'fecha', 'date', 'time', 'tiempo'
-- **Columna de demanda**: Debe contener una de estas palabras clave en el nombre: 'demanda', 'demand', 'consumo', 'consumption', 'energia', 'energy'
-- **Formato de fecha**: Debe ser reconocible por pandas (ej: YYYY-MM-DD, DD/MM/YYYY, etc.)
-- **Datos**: La columna de demanda debe contener valores numéricos
-- **Header**: Los datos deben comenzar en la fila 4 (header en fila 3)
+- **Período**: 2000-2023 (24 años de datos)
+- **Frecuencia**: Datos diarios convertidos automáticamente a horarios
+- **Archivos**: 24 archivos Excel organizados por año
+- **Formato**: Cada archivo contiene columnas de fecha y demanda energética
 
-### Ejemplo de estructura esperada:
+### Estructura de Datos
 
-| Fecha | Demanda |
-|-------|---------|
-| 2023-01-01 00:00 | 1500.5 |
-| 2023-01-01 01:00 | 1450.2 |
-| 2023-01-01 02:00 | 1400.8 |
-| ... | ... |
+Los archivos Excel siguen el formato estándar:
+- **Columna de fecha**: Detectada automáticamente por palabras clave
+- **Columna de demanda**: Detectada automáticamente por palabras clave  
+- **Header**: Los datos comienzan en la fila 4 (header en fila 3)
+- **Conversión automática**: Datos diarios se convierten a horarios simulando patrones típicos
+
+### Ejemplo de datos incluidos:
+
+| Año | Archivo | Observaciones |
+|-----|---------|---------------|
+| 2000 | Demanda_Energia_SIN_2000.xlsx | ~119 días |
+| 2001 | Demanda_Energia_SIN_2001.xlsx | ~108 días |
+| ... | ... | ... |
+| 2023 | Demanda_Energia_SIN_2023.xlsx | ~142 días |
 
 ## Estructura del Proyecto
 
 ```
 forecasting/
 ├── energy_demand_forecasting.py         # Script original (datos Victoria)
-├── energy_demand_forecasting_xlsx.py    # Script para archivos Excel
+├── energy_demand_forecasting_xlsx.py    # Script principal para predicción
 ├── forecasting_colab.ipynb             # Notebook completo para Colab
 ├── requirements.txt                     # Dependencias
 ├── .gitignore                          # Archivos ignorados por git
-├── Demanda_Energia_SIN_2023.xlsx      # Archivo de datos Excel
+├── demanda-energia-sin/                # Carpeta con datos históricos
+│   ├── Demanda_Energia_SIN_2000.xlsx
+│   ├── Demanda_Energia_SIN_2001.xlsx
+│   ├── ...
+│   └── Demanda_Energia_SIN_2023.xlsx
+├── prediccion_demanda_YYYYMMDD.csv     # Archivo de salida con predicciones
 └── README.md                           # Este archivo
 ```
 
 ## Metodología
 
-1. **Carga y procesamiento**: Detección automática de columnas y conversión a datos horarios
-2. **Exploración**: Análisis de estacionalidad y autocorrelación
-3. **Baseline**: Modelo de referencia con valores del día anterior
-4. **Modelo principal**: LightGBM con lags y variables exógenas
-5. **Optimización**: Búsqueda bayesiana de hiperparámetros
-6. **Selección**: RFECV para identificar predictores más relevantes
-7. **Probabilístico**: Intervalos de confianza con conformal prediction
-8. **Explicabilidad**: SHAP values para interpretar predicciones
-9. **Multi-step**: Estrategias recursiva y directa
-10. **Anticipada**: Predicciones con gap temporal
+1. **Carga automática**: Lectura de múltiples archivos Excel desde `demanda-energia-sin/`
+2. **Análisis exploratorio**: Estadísticas descriptivas, visualizaciones y detección de patrones
+3. **Procesamiento**: Conversión de datos diarios a horarios con patrones simulados
+4. **Partición temporal**: 70% entrenamiento, 15% validación, 15% prueba
+5. **Modelo baseline**: Valores del día anterior como referencia
+6. **Variables exógenas**: Calendario, luz solar, festivos y temperatura
+7. **Optimización**: Búsqueda bayesiana de hiperparámetros de LightGBM
+8. **Selección de predictores**: RFECV para identificar variables más relevantes
+9. **Predicción del día siguiente**: 24 horas de anticipación con visualizaciones
+10. **Exportación**: Resultados guardados en CSV para uso posterior
 
 ## Variables Exógenas Creadas
 

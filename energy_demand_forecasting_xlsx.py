@@ -67,28 +67,67 @@ def print_versions():
 
 def load_and_process_data():
     """
-    Carga y procesa los datos de demanda eléctrica desde archivo Excel
+    Carga y procesa los datos de demanda eléctrica desde múltiples archivos Excel
     """
     print("=" * 60)
     print("CARGANDO Y PROCESANDO DATOS")
     print("=" * 60)
     
-    # Cargar datos desde Excel
-    print("Cargando datos desde Demanda_Energia_SIN_2023.xlsx...")
-    try:
-        # Leer el archivo Excel con header en la fila 3 (0-indexed)
-        datos = pd.read_excel('Demanda_Energia_SIN_2023.xlsx', header=3)
-        print(f"Shape del dataset: {datos.shape}")
-        print(f"Columnas: {list(datos.columns)}")
-        print(f"Primeras 5 filas:")
-        print(datos.head())
-    except FileNotFoundError:
-        print("Error: No se encontró el archivo 'Demanda_Energia_SIN_2023.xlsx'")
-        print("Asegúrate de que el archivo esté en el directorio actual.")
+    # Buscar archivos Excel en la carpeta demanda-energia-sin/
+    import os
+    import glob
+    
+    data_folder = 'demanda-energia-sin'
+    if not os.path.exists(data_folder):
+        print(f"Error: No se encontró la carpeta '{data_folder}'")
+        print("Asegúrate de que la carpeta con los datos esté en el directorio actual.")
         return None, None, None, None, None, None
-    except Exception as e:
-        print(f"Error al cargar el archivo: {e}")
+    
+    # Buscar todos los archivos Excel en la carpeta
+    excel_files = glob.glob(os.path.join(data_folder, '*.xlsx'))
+    excel_files.sort()  # Ordenar por nombre para mantener orden cronológico
+    
+    if not excel_files:
+        print(f"Error: No se encontraron archivos Excel en la carpeta '{data_folder}'")
         return None, None, None, None, None, None
+    
+    print(f"Encontrados {len(excel_files)} archivos Excel:")
+    for file in excel_files:
+        print(f"  - {os.path.basename(file)}")
+    
+    # Cargar y combinar todos los archivos Excel
+    all_data = []
+    
+    for file_path in excel_files:
+        print(f"\nCargando {os.path.basename(file_path)}...")
+        try:
+            # Leer el archivo Excel con header en la fila 3 (0-indexed)
+            df = pd.read_excel(file_path, header=3)
+            print(f"  Shape: {df.shape}")
+            print(f"  Columnas: {list(df.columns)}")
+            
+            # Agregar información del año si no está en los datos
+            year = os.path.basename(file_path).split('_')[-1].replace('.xlsx', '')
+            if 'year' not in df.columns:
+                df['year'] = int(year)
+            
+            all_data.append(df)
+            
+        except Exception as e:
+            print(f"  Error al cargar {os.path.basename(file_path)}: {e}")
+            continue
+    
+    if not all_data:
+        print("Error: No se pudieron cargar archivos Excel válidos.")
+        return None, None, None, None, None, None
+    
+    # Combinar todos los datos
+    print(f"\nCombinando {len(all_data)} archivos...")
+    datos = pd.concat(all_data, ignore_index=True)
+    print(f"Shape del dataset combinado: {datos.shape}")
+    print(f"Columnas: {list(datos.columns)}")
+    print(f"Primeras 5 filas:")
+    print(datos.head())
     
     # Detectar automáticamente la columna de fecha y demanda
     print("\nDetectando columnas de fecha y demanda...")
@@ -171,6 +210,7 @@ def load_and_process_data():
         datos = datos.set_index('Time')
         datos = datos.sort_index()
         print(f"Nuevo shape con datos horarios: {datos.shape}")
+        datos = datos.asfreq("H")  # Establecer frecuencia horaria
     else:
         datos = datos.asfreq(freq_detected)
     
@@ -223,29 +263,95 @@ def load_and_process_data():
 
 def exploratory_analysis(datos, datos_train, datos_val, datos_test):
     """
-    Realiza análisis exploratorio de la serie temporal
+    Realiza análisis exploratorio completo de la serie temporal
     """
     print("\n" + "=" * 60)
     print("ANÁLISIS EXPLORATORIO")
     print("=" * 60)
     
-    # Gráfico de la serie temporal completa
-    print("Generando gráfico de la serie temporal...")
+    # Estadísticas descriptivas
+    print("ESTADÍSTICAS DESCRIPTIVAS")
+    print("-" * 40)
+    print(f"Período total: {datos.index.min()} a {datos.index.max()}")
+    print(f"Duración: {(datos.index.max() - datos.index.min()).days} días")
+    print(f"Total de observaciones: {len(datos):,}")
+    print(f"Frecuencia: {pd.infer_freq(datos.index)}")
+    print(f"\nEstadísticas de demanda:")
+    print(datos['Demand'].describe())
+    
+    # Análisis de valores faltantes
+    missing_values = datos['Demand'].isnull().sum()
+    print(f"\nValores faltantes: {missing_values} ({missing_values/len(datos)*100:.2f}%)")
+    
+    # Gráfico de la serie temporal completa con zoom
+    print("\nGenerando gráficos de la serie temporal...")
+    
+    # Gráfico principal con todas las particiones
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=datos_train.index, y=datos_train['Demand'], mode='lines', name='Train'))
-    fig.add_trace(go.Scatter(x=datos_val.index, y=datos_val['Demand'], mode='lines', name='Validation'))
-    fig.add_trace(go.Scatter(x=datos_test.index, y=datos_test['Demand'], mode='lines', name='Test'))
+    fig.add_trace(go.Scatter(x=datos_train.index, y=datos_train['Demand'], 
+                            mode='lines', name='Entrenamiento', line=dict(color='blue', width=1)))
+    fig.add_trace(go.Scatter(x=datos_val.index, y=datos_val['Demand'], 
+                            mode='lines', name='Validación', line=dict(color='orange', width=1)))
+    fig.add_trace(go.Scatter(x=datos_test.index, y=datos_test['Demand'], 
+                            mode='lines', name='Prueba', line=dict(color='red', width=1)))
+    
     fig.update_layout(
-        title  = 'Demanda eléctrica horaria',
+        title='Demanda Eléctrica - Serie Temporal Completa',
         xaxis_title="Fecha",
         yaxis_title="Demanda (MWh)",
         legend_title="Partición:",
-        width=800,
-        height=400,
-        margin=dict(l=20, r=20, t=35, b=20),
-        legend=dict(orientation="h", yanchor="top", y=1, xanchor="left", x=0.001)
+        width=1000,
+        height=500,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(orientation="h", yanchor="top", y=1.02, xanchor="left", x=0.01)
     )
     fig.show()
+    
+    # Gráfico de zoom en los últimos 2 años
+    if len(datos) > 24 * 365 * 2:  # Si hay más de 2 años de datos
+        datos_recientes = datos.tail(24 * 365 * 2)  # Últimos 2 años
+        fig_zoom = go.Figure()
+        fig_zoom.add_trace(go.Scatter(x=datos_recientes.index, y=datos_recientes['Demand'], 
+                                    mode='lines', name='Demanda', line=dict(color='blue', width=1)))
+        fig_zoom.update_layout(
+            title='Demanda Eléctrica - Últimos 2 Años (Zoom)',
+            xaxis_title="Fecha",
+            yaxis_title="Demanda (MWh)",
+            width=1000,
+            height=400
+        )
+        fig_zoom.show()
+    
+    # Gráfico de distribución de la demanda
+    print("Generando gráficos de distribución...")
+    fig_dist = go.Figure()
+    fig_dist.add_trace(go.Histogram(x=datos['Demand'], nbinsx=50, name='Distribución', 
+                                   marker_color='lightblue', opacity=0.7))
+    fig_dist.update_layout(
+        title='Distribución de la Demanda Eléctrica',
+        xaxis_title="Demanda (MWh)",
+        yaxis_title="Frecuencia",
+        width=800,
+        height=400
+    )
+    fig_dist.show()
+    
+    # Box plot por año si hay datos de múltiples años
+    if 'year' in datos.columns and datos['year'].nunique() > 1:
+        print("Generando box plot por año...")
+        fig_box = go.Figure()
+        for year in sorted(datos['year'].unique()):
+            year_data = datos[datos['year'] == year]['Demand']
+            fig_box.add_trace(go.Box(y=year_data, name=str(year), boxpoints='outliers'))
+        
+        fig_box.update_layout(
+            title='Distribución de Demanda por Año',
+            yaxis_title="Demanda (MWh)",
+            xaxis_title="Año",
+            width=800,
+            height=500
+        )
+        fig_box.show()
     
     # Gráfico de estacionalidad
     print("Generando gráficos de estacionalidad...")
@@ -910,15 +1016,140 @@ def daily_advance_prediction(datos, exog_select, best_params, lags_select, fin_v
     return metrica.iloc[0, 0]
 
 # ==============================================================================
+# PREDICCIÓN DEL DÍA SIGUIENTE
+# ==============================================================================
+
+def predict_next_day_demand(datos, exog_select, best_params, lags_select, fin_validacion):
+    """
+    Predice la demanda energética para el día siguiente a la última muestra
+    """
+    print("\n" + "=" * 60)
+    print("PREDICCIÓN DEL DÍA SIGUIENTE")
+    print("=" * 60)
+    
+    # Crear y entrenar el forecaster final con todos los datos disponibles
+    window_features = RollingFeatures(stats=["mean"], window_sizes=24 * 3)
+    forecaster_final = ForecasterRecursive(
+                         regressor       = LGBMRegressor(**best_params),
+                         lags            = lags_select,
+                         window_features = window_features
+                     )
+    
+    # Entrenar con todos los datos hasta el final de validación
+    forecaster_final.fit(
+        y    = datos.loc[:fin_validacion, 'Demand'],
+        exog = datos.loc[:fin_validacion, exog_select]
+    )
+    
+    # Obtener la última fecha de los datos
+    ultima_fecha = datos.index.max()
+    print(f"Última fecha en los datos: {ultima_fecha}")
+    
+    # Calcular la fecha del día siguiente
+    siguiente_dia = ultima_fecha + pd.Timedelta(days=1)
+    print(f"Prediciendo demanda para: {siguiente_dia.date()}")
+    
+    # Crear variables exógenas para el día siguiente
+    # Necesitamos crear un DataFrame con las variables exógenas para las 24 horas del día siguiente
+    horas_siguiente_dia = pd.date_range(
+        start=siguiente_dia.replace(hour=0, minute=0, second=0),
+        end=siguiente_dia.replace(hour=23, minute=0, second=0),
+        freq='H'
+    )
+    
+    # Crear DataFrame temporal para el día siguiente
+    datos_siguiente = pd.DataFrame(index=horas_siguiente_dia)
+    datos_siguiente['Demand'] = np.nan  # No conocemos la demanda real
+    
+    # Recrear las variables exógenas para el día siguiente
+    datos_complete_siguiente, _ = create_exogenous_variables(datos_siguiente)
+    
+    # Asegurar que tenemos las mismas columnas exógenas
+    exog_siguiente = datos_complete_siguiente[exog_select].copy()
+    
+    print(f"Variables exógenas para el día siguiente: {exog_siguiente.shape}")
+    
+    # Realizar la predicción para las 24 horas del día siguiente
+    prediccion_siguiente = forecaster_final.predict(
+        exog=exog_siguiente,
+        steps=24
+    )
+    
+    # Crear DataFrame con las predicciones
+    prediccion_df = pd.DataFrame({
+        'fecha_hora': horas_siguiente_dia,
+        'demanda_predicha': prediccion_siguiente
+    })
+    
+    # Calcular estadísticas de la predicción
+    demanda_total_dia = prediccion_siguiente.sum()
+    demanda_promedio = prediccion_siguiente.mean()
+    demanda_maxima = prediccion_siguiente.max()
+    demanda_minima = prediccion_siguiente.min()
+    hora_pico = horas_siguiente_dia[prediccion_siguiente.argmax()]
+    hora_valle = horas_siguiente_dia[prediccion_siguiente.argmin()]
+    
+    print(f"\nPREDICCIÓN PARA {siguiente_dia.date()}:")
+    print("-" * 40)
+    print(f"Demanda total del día: {demanda_total_dia:,.2f} MWh")
+    print(f"Demanda promedio: {demanda_promedio:,.2f} MWh")
+    print(f"Demanda máxima: {demanda_maxima:,.2f} MWh a las {hora_pico.strftime('%H:%M')}")
+    print(f"Demanda mínima: {demanda_minima:,.2f} MWh a las {hora_valle.strftime('%H:%M')}")
+    
+    # Mostrar predicción por horas
+    print(f"\nPredicción horaria:")
+    print("-" * 40)
+    for i, (fecha, demanda) in enumerate(zip(horas_siguiente_dia, prediccion_siguiente)):
+        print(f"{fecha.strftime('%H:%M')}: {demanda:8.2f} MWh")
+        if (i + 1) % 6 == 0:  # Nueva línea cada 6 horas
+            print()
+    
+    # Crear gráfico de la predicción
+    print("\nGenerando gráfico de predicción...")
+    fig = go.Figure()
+    
+    # Agregar datos históricos de los últimos 7 días para contexto
+    datos_historicos = datos.tail(7 * 24)  # Últimos 7 días
+    fig.add_trace(go.Scatter(
+        x=datos_historicos.index, 
+        y=datos_historicos['Demand'], 
+        mode='lines', 
+        name='Datos Históricos (7 días)',
+        line=dict(color='lightblue', width=1)
+    ))
+    
+    # Agregar predicción del día siguiente
+    fig.add_trace(go.Scatter(
+        x=horas_siguiente_dia, 
+        y=prediccion_siguiente, 
+        mode='lines+markers', 
+        name=f'Predicción {siguiente_dia.date()}',
+        line=dict(color='red', width=2),
+        marker=dict(size=4)
+    ))
+    
+    fig.update_layout(
+        title=f'Predicción de Demanda Eléctrica - {siguiente_dia.date()}',
+        xaxis_title="Fecha y Hora",
+        yaxis_title="Demanda (MWh)",
+        width=1000,
+        height=500,
+        legend=dict(orientation="h", yanchor="top", y=1.02, xanchor="left", x=0.01)
+    )
+    fig.show()
+    
+    return prediccion_df, forecaster_final
+
+# ==============================================================================
 # FUNCIÓN PRINCIPAL
 # ==============================================================================
 
 def main():
     """
-    Función principal que ejecuta todo el pipeline de forecasting
+    Función principal que ejecuta el pipeline de forecasting enfocado en predicción del día siguiente
     """
     print("=" * 60)
-    print("PREDICCIÓN DE DEMANDA ENERGÉTICA CON MACHINE LEARNING")
+    print("PREDICCIÓN DE DEMANDA ENERGÉTICA - DÍA SIGUIENTE")
     print("=" * 60)
     
     # Imprimir versiones
@@ -928,16 +1159,20 @@ def main():
     datos, datos_train, datos_val, datos_test, fin_train, fin_validacion = load_and_process_data()
     
     if datos is None:
-        print("Error: No se pudieron cargar los datos. Verifica el archivo Excel.")
+        print("Error: No se pudieron cargar los datos. Verifica los archivos Excel.")
         return
     
-    # Análisis exploratorio
+    # Análisis exploratorio completo
     exploratory_analysis(datos, datos_train, datos_val, datos_test)
     
-    # Modelo baseline
+    # Modelo baseline para comparación
+    print("\n" + "=" * 60)
+    print("ENTRENANDO MODELOS")
+    print("=" * 60)
+    
     mae_baseline = create_baseline_model(datos, fin_validacion)
     
-    # Modelo autoregresivo recursivo
+    # Modelo autoregresivo recursivo básico
     forecaster_recursive, mae_recursive = create_recursive_model(datos, fin_validacion)
     
     # Crear variables exógenas
@@ -948,33 +1183,20 @@ def main():
     datos_val_complete   = datos_complete.loc[fin_train:fin_validacion, :].copy()
     datos_test_complete  = datos_complete.loc[fin_validacion:, :].copy()
     
-    # Optimización de hiperparámetros
+    # Optimización de hiperparámetros (reducido para mayor velocidad)
+    print("\nOptimizando hiperparámetros...")
     forecaster_optimized, best_params, best_lags = optimize_hyperparameters(
         datos_complete, exog_features, fin_train, fin_validacion
     )
     
     # Selección de predictores
+    print("\nSeleccionando predictores más relevantes...")
     lags_select, window_features_select, exog_select = select_predictors(
         datos_complete, exog_features, best_params, best_lags, fin_train
     )
     
-    # Forecasting probabilístico
-    predicciones_prob, mae_prob = probabilistic_forecasting(
-        datos_complete, exog_select, best_params, lags_select, fin_train, fin_validacion
-    )
-    
-    # Explicabilidad del modelo
-    forecaster_explainable = model_explainability(
-        datos_complete, exog_select, best_params, lags_select, fin_validacion
-    )
-    
-    # Forecaster direct multi-step
-    mae_direct = direct_multi_step_forecasting(
-        datos_complete, exog_select, best_params, lags_select
-    )
-    
-    # Predicción diaria anticipada
-    mae_advance = daily_advance_prediction(
+    # Predicción del día siguiente (objetivo principal)
+    prediccion_df, forecaster_final = predict_next_day_demand(
         datos_complete, exog_select, best_params, lags_select, fin_validacion
     )
     
@@ -984,11 +1206,16 @@ def main():
     print("=" * 60)
     print(f"MAE Baseline:                    {mae_baseline:.2f}")
     print(f"MAE Recursivo:                   {mae_recursive:.2f}")
-    print(f"MAE Probabilístico:              {mae_prob.iloc[0, 0]:.2f}")
-    print(f"MAE Direct Multi-step:           {mae_direct:.2f}")
-    print(f"MAE Predicción Anticipada:       {mae_advance:.2f}")
+    print(f"Variables exógenas utilizadas:   {len(exog_select)}")
+    print(f"Lags seleccionados:              {len(lags_select)}")
+    
+    # Guardar predicción en archivo CSV
+    output_file = f"prediccion_demanda_{prediccion_df['fecha_hora'].iloc[0].strftime('%Y%m%d')}.csv"
+    prediccion_df.to_csv(output_file, index=False)
+    print(f"\nPredicción guardada en: {output_file}")
     
     print("\n¡Pipeline de forecasting completado exitosamente!")
+    print("La predicción del día siguiente está lista para su uso.")
 
 if __name__ == "__main__":
     main()
